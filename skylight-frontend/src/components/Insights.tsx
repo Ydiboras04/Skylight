@@ -1,62 +1,38 @@
 import type { Entry } from '../api'
-import { CONDITIONS, getCondition } from '../conditions'
-import { MOODS } from '../moods'
+import { CONDITION_COLORS, CONDITIONS, getCondition } from '../conditions'
 
 type Props = {
   entries: Entry[]
 }
 
+// Average mood and number of entries for each kind of weather
 export function Insights({ entries }: Props) {
-  if (entries.length === 0) {
-    return <p>Save a few days to see your patterns here.</p>
-  }
-
-  const overallMood = average(entries.map((e) => e.mood))
-
   return (
-    <div class="card">
-      <p>
-        {entries.length} entries · average mood {MOODS[Math.round(overallMood) - 1].emoji}{' '}
-        {overallMood.toFixed(1)} / 5
-      </p>
+    <div class="insights">
+      {CONDITIONS.map((condition, i) => {
+        const matching = entries.filter((e) => getCondition(e.weather) === condition)
+        const average =
+          matching.length > 0 ? matching.reduce((sum, e) => sum + e.mood, 0) / matching.length : 0
 
-      <table class="insights">
-        <thead>
-          <tr>
-            <th>Weather</th>
-            <th>Entries</th>
-            <th>Average mood</th>
-          </tr>
-        </thead>
-        <tbody>
-          {CONDITIONS.map((condition) => {
-            const matching = entries.filter((e) => getCondition(e.weather) === condition)
-            const mood = average(matching.map((e) => e.mood))
-
-            return (
-              <tr key={condition}>
-                <td>{condition}</td>
-                <td>{matching.length}</td>
-                <td>
-                  {matching.length === 0 ? (
-                    '-'
-                  ) : (
-                    <div class="bar-row">
-                      <div class="bar" style={{ width: `${(mood / 5) * 100}%` }} />
-                      <span>{mood.toFixed(1)}</span>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+        return (
+          <div key={condition} class="insight-row">
+            <span class="insight-label">{condition}</span>
+            <div class="bar-track">
+              <div
+                class="bar grow-x"
+                style={{
+                  width: `${(average / 5) * 100}%`,
+                  background: CONDITION_COLORS[condition],
+                  animationDelay: `${0.3 + i * 0.1}s`,
+                }}
+              />
+            </div>
+            <span class="muted small insight-value">
+              <strong>{matching.length > 0 ? average.toFixed(1) : '–'}</strong> · {matching.length}×
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
-}
-
-function average(numbers: number[]): number {
-  if (numbers.length === 0) return 0
-  return numbers.reduce((sum, n) => sum + n, 0) / numbers.length
 }

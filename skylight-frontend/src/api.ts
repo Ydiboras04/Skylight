@@ -12,6 +12,7 @@ export type Weather = {
   wind_speed_10m: number
   cloud_cover: number
   is_day: number // 1 = day, 0 = night
+  timezone: string // e.g. "Asia/Tokyo" (empty for old entries)
   precipitation: number
 }
 
@@ -55,4 +56,21 @@ export async function saveEntry(entry: NewEntry): Promise<Entry> {
   })
   if (!res.ok) throw new Error('Could not save entry')
   return res.json()
+}
+
+// ----- AI (Gemini, via the backend) -----
+
+// since = first day to include, "YYYY-MM-DD"
+export async function getWeeklyReflection(since: string): Promise<string> {
+  const res = await fetch(`/api/ai/weekly-reflection?since=${since}`)
+  if (!res.ok) throw new Error('Could not get the weekly reflection')
+  const data = await res.json()
+  return data.text
+}
+
+export async function getRecommendations(code: string): Promise<string> {
+  const res = await fetch(`/api/ai/recommendations/${code}`)
+  if (!res.ok) throw new Error('Could not get recommendations')
+  const data = await res.json()
+  return data.text
 }
