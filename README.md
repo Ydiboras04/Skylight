@@ -93,4 +93,4 @@ With `VITE_API_URL` left empty, the frontend uses the local backend through Vite
 
 ## License
 
-[YOUR LICENSE]
+None
