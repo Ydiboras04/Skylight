@@ -8,6 +8,7 @@ Log your daily mood, notes and activities alongside live weather data, and disco
 ## Run
 
 ```bash
+cd skylight-backend && cp .env.example .env   # then put your Gemini API key in .env
 cd skylight-backend && cargo run
 cd skylight-frontend && npm install && npm run dev
 ```
