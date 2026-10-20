@@ -35,18 +35,36 @@ pub async fn ask_gemini(prompt: String) -> Result<String, String> {
         "contents": [{ "parts": [{ "text": prompt }] }]
     });
 
-    let response = reqwest::Client::new()
-        .post(URL)
-        .header("x-goog-api-key", api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    // Gemini is sometimes briefly overloaded (503) or rate-limited (429).
+    // Those errors usually pass, so we try up to 3 times, waiting a bit longer each time.
+    let client = reqwest::Client::new();
+    let mut attempt = 1;
 
-    if !response.status().is_success() {
+    let response = loop {
+        let response = client
+            .post(URL)
+            .header("x-goog-api-key", &api_key)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let status = response.status();
+        if status.is_success() {
+            break response;
+        }
+
+        let temporary = status.as_u16() == 429 || status.is_server_error();
         let error = response.text().await.unwrap_or_default();
-        return Err(format!("Gemini error: {}", error));
-    }
+
+        if !temporary || attempt == 3 {
+            return Err(format!("Gemini error ({}): {}", status, error));
+        }
+
+        eprintln!("Gemini error ({}), retrying (attempt {} of 3)", status, attempt);
+        tokio::time::sleep(std::time::Duration::from_secs(2 * attempt)).await;
+        attempt += 1;
+    };
 
     let data: GeminiResponse = response.json().await.map_err(|e| e.to_string())?;
 
