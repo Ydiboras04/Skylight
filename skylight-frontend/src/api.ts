@@ -1,3 +1,7 @@
+// The backend's address, from .env (VITE_API_URL=https://...).
+// Empty in development: requests then go to /api/... and Vite forwards them to localhost:3000.
+const API_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
 // Types match what the Rust backend returns
 
 export type Country = {
@@ -17,13 +21,13 @@ export type Weather = {
 }
 
 export async function getCountries(): Promise<Country[]> {
-  const res = await fetch('/api/countries')
+  const res = await fetch(`${API_URL}/api/countries`)
   if (!res.ok) throw new Error('Could not load countries')
   return res.json()
 }
 
 export async function getWeather(code: string): Promise<Weather> {
-  const res = await fetch(`/api/countries/${code}/weather`)
+  const res = await fetch(`${API_URL}/api/countries/${code}/weather`)
   if (!res.ok) throw new Error('Could not load weather')
   return res.json()
 }
@@ -43,13 +47,13 @@ export type Entry = NewEntry & {
 }
 
 export async function getEntries(): Promise<Entry[]> {
-  const res = await fetch('/api/entries')
+  const res = await fetch(`${API_URL}/api/entries`)
   if (!res.ok) throw new Error('Could not load entries')
   return res.json()
 }
 
 export async function saveEntry(entry: NewEntry): Promise<Entry> {
-  const res = await fetch('/api/entries', {
+  const res = await fetch(`${API_URL}/api/entries`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry),
@@ -62,14 +66,14 @@ export async function saveEntry(entry: NewEntry): Promise<Entry> {
 
 // since = first day to include, "YYYY-MM-DD"
 export async function getWeeklyReflection(since: string): Promise<string> {
-  const res = await fetch(`/api/ai/weekly-reflection?since=${since}`)
+  const res = await fetch(`${API_URL}/api/ai/weekly-reflection?since=${since}`)
   if (!res.ok) throw new Error('Could not get the weekly reflection')
   const data = await res.json()
   return data.text
 }
 
 export async function getRecommendations(code: string): Promise<string> {
-  const res = await fetch(`/api/ai/recommendations/${code}`)
+  const res = await fetch(`${API_URL}/api/ai/recommendations/${code}`)
   if (!res.ok) throw new Error('Could not get recommendations')
   const data = await res.json()
   return data.text
