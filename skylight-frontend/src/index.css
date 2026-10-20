@@ -1,0 +1,106 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+main {
+  max-width: 400px;
+  margin: 40px auto;
+  padding: 0 16px;
+}
+
+select {
+  width: 100%;
+  padding: 8px;
+  font-size: 16px;
+}
+
+.card {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #8884;
+  border-radius: 8px;
+}
+
+.temperature {
+  font-size: 40px;
+  margin: 0;
+}
+
+.error {
+  color: crimson;
+}
+
+.moods {
+  display: flex;
+  gap: 8px;
+}
+
+.moods button {
+  font-size: 28px;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.moods button.selected {
+  border-color: royalblue;
+}
+
+.activities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+textarea {
+  width: 100%;
+  min-height: 80px;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+  font: inherit;
+}
+
+.entries {
+  list-style: none;
+  padding: 0;
+}
+
+.entries p {
+  margin: 4px 0;
+}
+
+.moods button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.moods small {
+  font-size: 12px;
+}
+
+.insights {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.insights th,
+.insights td {
+  text-align: left;
+  padding: 6px 4px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar {
+  height: 10px;
+  border-radius: 5px;
+  background: royalblue;
+}
