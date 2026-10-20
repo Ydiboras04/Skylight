@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::countries::load_countries;
 use crate::entries::load_entries;
 use crate::gemini::ask_gemini;
+use crate::routes::database_error;
 use crate::weather::fetch_weather;
 
 // Both AI routes return: { "text": "..." }
@@ -28,6 +29,8 @@ pub struct WeekQuery {
 pub async fn weekly_reflection(Query(query): Query<WeekQuery>) -> Result<Json<AiAnswer>, StatusCode> {
     // Dates are "YYYY-MM-DD", so comparing them as text works
     let entries: Vec<_> = load_entries()
+        .await
+        .map_err(database_error)?
         .into_iter()
         .filter(|e| e.date >= query.since)
         .collect();
@@ -66,7 +69,12 @@ pub async fn recommendations(Path(code): Path<String>) -> Result<Json<AiAnswer>,
     };
 
     // The 20 most recent entries, so the advice is personal (entries are sorted newest first)
-    let recent: Vec<_> = load_entries().into_iter().take(20).collect();
+    let recent: Vec<_> = load_entries()
+        .await
+        .map_err(database_error)?
+        .into_iter()
+        .take(20)
+        .collect();
 
     let prompt = format!(
         "You are the assistant of Skylight, a mood and weather journal.\n\

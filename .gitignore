@@ -6,3 +6,6 @@ skylight-backend/entries.json
 
 # Secrets
 .env
+
+# Local Supabase connection notes
+skylight-backend/supabase/db_connect.txt

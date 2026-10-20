@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::Json;
 
 use crate::countries::{load_countries, Country};
-use crate::entries::{load_entries, save_entries, Entry, NewEntry};
+use crate::entries::{insert_entry, load_entries, Entry, NewEntry};
 use crate::weather::{fetch_weather, Weather};
 
 // GET /api/countries
@@ -27,8 +27,11 @@ pub async fn get_weather(Path(code): Path<String>) -> Result<Json<Weather>, Stat
 }
 
 // GET /api/entries
-pub async fn get_entries() -> Json<Vec<Entry>> {
-    Json(load_entries())
+pub async fn get_entries() -> Result<Json<Vec<Entry>>, StatusCode> {
+    match load_entries().await {
+        Ok(entries) => Ok(Json(entries)),
+        Err(error) => Err(database_error(error)),
+    }
 }
 
 // POST /api/entries
@@ -68,11 +71,15 @@ pub async fn create_entry(Json(new_entry): Json<NewEntry>) -> Result<Json<Entry>
         weather,
     };
 
-    // Add the new entry to the existing ones (nothing is replaced)
-    let mut entries = load_entries();
-    entries.push(entry.clone());
-    entries.sort_by(|a, b| (&b.date, b.created_at).cmp(&(&a.date, a.created_at))); // newest first
-    save_entries(&entries);
+    if let Err(error) = insert_entry(&entry).await {
+        return Err(database_error(error));
+    }
 
     Ok(Json(entry))
+}
+
+// Logs a Supabase error in the backend terminal and answers 502 to the frontend
+pub fn database_error(error: String) -> StatusCode {
+    eprintln!("{}", error);
+    StatusCode::BAD_GATEWAY
 }

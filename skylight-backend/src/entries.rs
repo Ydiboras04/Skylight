@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::weather::Weather;
 
-// The file where all entries are saved (in the folder where you run `cargo run`)
-const FILE_PATH: &str = "entries.json";
+// Entries are stored in Supabase, in the `entries` table (see supabase/schema.sql).
+// We use Supabase's REST API: GET to read rows, POST to insert one.
 
 // What the frontend sends when saving
 #[derive(Deserialize)]
@@ -15,13 +15,10 @@ pub struct NewEntry {
     pub activities: Vec<String>,
 }
 
-// What we save and send back: the entry + the weather at that moment
+// One row of the table (the `id` column is ignored: we don't need it)
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Entry {
-    // When it was saved, in seconds since 1970 (Unix time). Also used as a unique id.
-    // #[serde(default)]: old entries without this field load with 0 instead of failing.
-    #[serde(default)]
-    pub created_at: u64,
+    pub created_at: u64, // seconds since 1970 (Unix time)
     pub date: String,
     pub country_code: String,
     pub country_name: String,
@@ -31,17 +28,50 @@ pub struct Entry {
     pub weather: Weather,
 }
 
-pub fn load_entries() -> Vec<Entry> {
-    // If the file doesn't exist yet (first run), start with an empty list
-    // If the file exists but can't be read, stop instead of returning an empty list:
-    // otherwise the next save would erase everything.
-    match std::fs::read_to_string(FILE_PATH) {
-        Ok(text) => serde_json::from_str(&text).expect("entries.json is not valid"),
-        Err(_) => Vec::new(),
-    }
+// The table's address and the secret key, from .env
+fn supabase() -> Result<(String, String), String> {
+    let url = std::env::var("SUPABASE_URL").map_err(|_| "SUPABASE_URL is missing")?;
+    let key = std::env::var("SECRET_KEY").map_err(|_| "SECRET_KEY is missing")?;
+    Ok((format!("{}/rest/v1/entries", url.trim_end_matches('/')), key))
 }
 
-pub fn save_entries(entries: &Vec<Entry>) {
-    let text = serde_json::to_string_pretty(entries).unwrap();
-    std::fs::write(FILE_PATH, text).expect("could not write entries.json");
+// All entries, newest first
+pub async fn load_entries() -> Result<Vec<Entry>, String> {
+    let (url, key) = supabase()?;
+
+    let response = reqwest::Client::new()
+        .get(url)
+        .query(&[("select", "*"), ("order", "date.desc,created_at.desc")])
+        .header("apikey", &key)
+        .header("Authorization", format!("Bearer {}", key))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Supabase error: {}", response.text().await.unwrap_or_default()));
+    }
+
+    response.json().await.map_err(|e| e.to_string())
+}
+
+// Adds one entry
+pub async fn insert_entry(entry: &Entry) -> Result<(), String> {
+    let (url, key) = supabase()?;
+
+    let response = reqwest::Client::new()
+        .post(url)
+        .header("apikey", &key)
+        .header("Authorization", format!("Bearer {}", key))
+        .header("Prefer", "return=minimal") // we don't need the row sent back
+        .json(entry)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Supabase error: {}", response.text().await.unwrap_or_default()));
+    }
+
+    Ok(())
 }
