@@ -23,7 +23,8 @@ async fn main() {
 
     // Port 3000 by default, or PORT=4000 cargo run
     let port = std::env::var("PORT").unwrap_or(String::from("3000"));
-    let address = format!("127.0.0.1:{}", port);
+    // 0.0.0.0 = reachable from outside (needed on a host like Render), not only from this computer
+    let address = format!("0.0.0.0:{}", port);
 
     let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
     println!("Backend running on http://{}", address);
