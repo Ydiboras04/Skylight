@@ -1,58 +1,76 @@
 import { useEffect, useState } from 'preact/hooks'
-import { getCountries, getEntries, getWeather, saveEntry } from './api'
-import type { Country, Entry, NewEntry, Weather } from './api'
-import { AiPanel } from './components/AiPanel'
-import { Dashboard } from './components/Dashboard'
+import { getEntries, getWeatherByCoords, saveEntry } from './api'
+import type { Entry, NewEntry } from './api'
+import { timeOfDay, type TimeOfDay } from './dates'
 import { EntryForm } from './components/EntryForm'
-import { EntryList } from './components/EntryList'
+import { GlobeView } from './components/Globe'
 import { Header } from './components/Header'
-import { Insights } from './components/Insights'
-import { WeatherCard } from './components/WeatherCard'
-import { CheckIcon } from './icons'
+import { Starfield } from './components/Starfield'
+import { detectLocation, type Coords } from './location'
+import { CheckIcon, CloseIcon, SparkleIcon } from './icons'
+
+// Limb-glow colour of the globe, by the user's local time of day
+const ATMOSPHERE: Record<TimeOfDay, string> = {
+  morning: '#ffc08a',
+  afternoon: '#8fc0ff',
+  evening: '#ff9e7a',
+  night: '#7a8cff',
+}
 
 export function App() {
-  const [countries, setCountries] = useState<Country[]>([])
-  const [selected, setSelected] = useState('MG') // default: Madagascar
-  const [weather, setWeather] = useState<Weather | null>(null)
+  const [coords, setCoords] = useState<Coords | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [justSaved, setJustSaved] = useState<number | null>(null) // created_at of the new entry
   const [toast, setToast] = useState(false)
-  // Kept separately so it doesn't flash back to day while the next weather loads
-  const [isNight, setIsNight] = useState(false)
-  const [timezone, setTimezone] = useState('') // the selected country's time zone
+  const [shareOpen, setShareOpen] = useState(false)
+  // Theme + time zone, derived from the weather at the user's location
+  const [theme, setTheme] = useState<TimeOfDay>('afternoon')
+  const [timezone, setTimezone] = useState('')
 
-  // Load the countries and past entries once, when the page opens
+  // Detect the fixed location, and load every broadcast thought, once on open
   useEffect(() => {
-    getCountries()
-      .then(setCountries)
+    detectLocation()
+      .then(setCoords)
       .catch((e) => setError(e.message))
     getEntries()
       .then(setEntries)
       .catch((e) => setError(e.message))
   }, [])
 
-  // Load the weather every time the selected country changes
+  // Once we know where the user is, fetch their weather → time zone → theme
   useEffect(() => {
-    setWeather(null)
-    setError('')
-    getWeather(selected)
+    if (!coords) return
+    getWeatherByCoords(coords.lat, coords.lng)
       .then((w) => {
-        setWeather(w)
-        setIsNight(w.is_day === 0)
         setTimezone(w.timezone)
+        setTheme(timeOfDay(w.timezone))
       })
       .catch((e) => setError(e.message))
-  }, [selected])
+  }, [coords])
+
+  // Keep the theme in step with the clock while the app stays open
+  useEffect(() => {
+    if (!timezone) return
+    const timer = setInterval(() => setTheme(timeOfDay(timezone)), 60_000)
+    return () => clearInterval(timer)
+  }, [timezone])
+
+  // Esc closes the share popup
+  useEffect(() => {
+    if (!shareOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setShareOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [shareOpen])
 
   async function handleSave(newEntry: NewEntry) {
     setSaving(true)
     setError('')
     try {
-      const saved = await saveEntry(newEntry)
+      await saveEntry(newEntry)
       setEntries(await getEntries())
-      setJustSaved(saved.created_at)
+      setShareOpen(false)
       setToast(true)
       setTimeout(() => setToast(false), 2600)
     } catch (e) {
@@ -63,57 +81,53 @@ export function App() {
     }
   }
 
-  const countryName = countries.find((c) => c.code === selected)?.name ?? ''
+  const isNight = theme === 'night'
 
   return (
-    // Night in the selected country → dark mode (the gradient becomes a night sky)
-    <div class={`page ${isNight ? 'night' : ''}`}>
-      <div class="container">
-        <Header
-          countries={countries}
-          selected={selected}
-          onSelect={setSelected}
-          isNight={isNight}
-          timezone={timezone}
-        />
+    // The user's local time of day tints the universe + globe (night = deepest)
+    <div class={`page ${theme}`}>
+      <Starfield />
+      <GlobeView entries={entries} atmosphere={ATMOSPHERE[theme]} />
 
-        {error && (
-          <p class="error-banner" role="alert">
-            {error}
-          </p>
-        )}
+      <Header isNight={isNight} timezone={timezone} />
 
-        <div class="grid">
-          <Dashboard entries={entries} />
-          <WeatherCard countryName={countryName} weather={weather} />
-          <EntryForm
-            countryCode={selected}
-            countryName={countryName}
-            saving={saving}
-            onSave={handleSave}
-          />
+      {error && (
+        <p class="error-banner" role="alert">
+          {error}
+        </p>
+      )}
 
-          <section class="card rise" style={{ animationDelay: '.24s' }}>
-            <h2>Mood by weather</h2>
-            <Insights entries={entries} />
-
-            <div class="journal">
-              <div class="card-title-row">
-                <h3>Journal</h3>
-                <span class="muted small">{entries.length} entries</span>
-              </div>
-              <EntryList entries={entries} highlight={justSaved} />
-            </div>
-          </section>
-        </div>
+      <div class="caption">
+        <b>{entries.length}</b> thoughts around the world · hover a face to read it
       </div>
 
-      <AiPanel countryCode={selected} countryName={countryName} />
+      <button class="fab" aria-label="Share a thought" onClick={() => setShareOpen(true)}>
+        <SparkleIcon size={26} />
+      </button>
+      <div class="fab-label">Share a thought</div>
+
+      <div
+        class={`backdrop ${shareOpen ? 'open' : ''}`}
+        onClick={(e) => e.target === e.currentTarget && setShareOpen(false)}
+      >
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="Share a thought">
+          <div class="sheet-head">
+            <div>
+              <h2>Share a thought</h2>
+              <p class="muted small">It appears on the globe, pinned to where you are now.</p>
+            </div>
+            <button class="close" aria-label="Close" onClick={() => setShareOpen(false)}>
+              <CloseIcon size={20} />
+            </button>
+          </div>
+          <EntryForm coords={coords} saving={saving} onSave={handleSave} />
+        </div>
+      </div>
 
       {toast && (
         <div class="toast" role="status">
           <CheckIcon size={18} class="toast-icon" />
-          Entry saved with today's weather
+          Your thought is on the globe
         </div>
       )}
     </div>

@@ -4,13 +4,6 @@ const API_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
 // Types match what the Rust backend returns
 
-export type Country = {
-  code: string
-  name: string
-  latitude: number
-  longitude: number
-}
-
 export type Weather = {
   temperature_2m: number
   wind_speed_10m: number
@@ -20,35 +13,33 @@ export type Weather = {
   precipitation: number
 }
 
-export async function getCountries(): Promise<Country[]> {
-  const res = await fetch(`${API_URL}/api/countries`)
-  if (!res.ok) throw new Error('Could not load countries')
-  return res.json()
-}
-
-export async function getWeather(code: string): Promise<Weather> {
-  const res = await fetch(`${API_URL}/api/countries/${code}/weather`)
+// Current weather at a point, used to pick the time-of-day theme.
+export async function getWeatherByCoords(lat: number, lng: number): Promise<Weather> {
+  const res = await fetch(`${API_URL}/api/weather?lat=${lat}&lng=${lng}`)
   if (!res.ok) throw new Error('Could not load weather')
   return res.json()
 }
 
+// What the frontend sends when broadcasting a thought
 export type NewEntry = {
-  date: string // "2026-10-20"
-  country_code: string
-  mood: number // 1 to 5
-  note: string
-  activities: string[]
+  lat: number
+  lng: number
+  mood: number // 1 to 5, picks the face shown on the globe
+  note: string // the thought itself
 }
 
+// A stored thought, as returned by the backend
 export type Entry = NewEntry & {
   created_at: number // seconds since 1970 (0 for old entries)
+  date: string
+  country_code: string
   country_name: string
   weather: Weather
 }
 
 export async function getEntries(): Promise<Entry[]> {
   const res = await fetch(`${API_URL}/api/entries`)
-  if (!res.ok) throw new Error('Could not load entries')
+  if (!res.ok) throw new Error('Could not load thoughts')
   return res.json()
 }
 
@@ -58,23 +49,6 @@ export async function saveEntry(entry: NewEntry): Promise<Entry> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry),
   })
-  if (!res.ok) throw new Error('Could not save entry')
+  if (!res.ok) throw new Error('Could not send your thought')
   return res.json()
-}
-
-// ----- AI (Gemini, via the backend) -----
-
-// since = first day to include, "YYYY-MM-DD"
-export async function getWeeklyReflection(since: string): Promise<string> {
-  const res = await fetch(`${API_URL}/api/ai/weekly-reflection?since=${since}`)
-  if (!res.ok) throw new Error('Could not get the weekly reflection')
-  const data = await res.json()
-  return data.text
-}
-
-export async function getRecommendations(code: string): Promise<string> {
-  const res = await fetch(`${API_URL}/api/ai/recommendations/${code}`)
-  if (!res.ok) throw new Error('Could not get recommendations')
-  const data = await res.json()
-  return data.text
 }

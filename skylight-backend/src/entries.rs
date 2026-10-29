@@ -5,14 +5,13 @@ use crate::weather::Weather;
 // Entries are stored in Supabase, in the `entries` table (see supabase/schema.sql).
 // We use Supabase's REST API: GET to read rows, POST to insert one.
 
-// What the frontend sends when saving
+// What the frontend sends when broadcasting a thought
 #[derive(Deserialize)]
 pub struct NewEntry {
-    pub date: String, // "2026-10-20"
-    pub country_code: String,
-    pub mood: u8, // 1 to 5
-    pub note: String,
-    pub activities: Vec<String>,
+    pub lat: f64, // where the thought is sent from
+    pub lng: f64,
+    pub mood: u8,     // 1 to 5, picks the face shown on the globe
+    pub note: String, // the thought itself
 }
 
 // One row of the table (the `id` column is ignored: we don't need it)
@@ -20,7 +19,13 @@ pub struct NewEntry {
 pub struct Entry {
     pub created_at: u64, // seconds since 1970 (Unix time)
     pub date: String,
-    pub country_code: String,
+    // #[serde(default)]: rows saved before thoughts carried coordinates don't have these,
+    // so they read back as 0 instead of failing the whole request.
+    #[serde(default)]
+    pub lat: f64,
+    #[serde(default)]
+    pub lng: f64,
+    pub country_code: String, // nearest country, a display label derived from lat/lng
     pub country_name: String,
     pub mood: u8,
     pub note: String,
