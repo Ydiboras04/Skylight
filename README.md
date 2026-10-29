@@ -54,7 +54,15 @@ skylight/
         ├── api.ts             calls to the backend
         ├── location.ts        auto-detect the fixed location
         ├── dates.ts           local time-of-day → theme
-        └── components/        Header, Globe, EntryForm, Clock
+        ├── moods.ts           the five moods + their face SVGs
+        ├── icons.tsx          inline UI icons
+        ├── index.css          theme + all styling
+        └── components/
+            ├── Globe.tsx      full-screen 3D globe of thought pins
+            ├── EntryForm.tsx  pick a mood + write a thought
+            ├── Header.tsx     brand, location pill, clock
+            ├── Clock.tsx      live local time
+            └── Starfield.tsx  animated star background
 ```
 
 ## API
