@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skylight — UI preview</title>
+    <meta name="description" content="Preview of the new Skylight layout: a full-screen globe over a starfield, with the share-a-thought form collapsed into a floating button." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@500;600;700&display=swap" />
+    <!-- globe.gl standalone build bundles three.js -->
+    <script src="https://unpkg.com/globe.gl@2.46.2/dist/globe.gl.min.js"></script>
+    <style>
+      :root {
+        --ink: #eaf1ff;
+        --muted: #9fb0cc;
+        --surface: #101a2eeb;
+        --surface-solid: #0f1829;
+        --line: #273753;
+        --sky: #4b8bff;
+        --sky-dark: #3a6fe0;
+        --sky-soft: rgba(75, 139, 255, 0.16);
+        --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+        --bounce: cubic-bezier(0.3, 1.6, 0.5, 1);
+        color-scheme: dark;
+        font-family: Inter, system-ui, sans-serif;
+        color: var(--ink);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden; /* globe fills everything; no page scroll */
+        background: #05070f;
+      }
+
+      /* ===== Universe background ===== */
+      .space {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        background:
+          radial-gradient(1200px 800px at 78% 18%, rgba(63, 48, 120, 0.42), transparent 60%),
+          radial-gradient(1000px 900px at 18% 82%, rgba(20, 70, 120, 0.38), transparent 62%),
+          radial-gradient(900px 700px at 60% 60%, rgba(96, 40, 110, 0.22), transparent 60%),
+          linear-gradient(180deg, #05070f 0%, #070a16 55%, #04060d 100%);
+      }
+
+      .stars, .stars::after {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        content: '';
+        background: transparent;
+        pointer-events: none;
+      }
+      /* Three depth layers, filled with box-shadow dots by JS */
+      .layer { position: fixed; top: 0; left: 0; width: 2px; height: 2px; border-radius: 50%; background: transparent; z-index: 1; pointer-events: none; }
+      .layer.a { animation: drift 180s linear infinite; }
+      .layer.b { animation: drift 320s linear infinite; }
+      .layer.c { animation: twinkle 6s ease-in-out infinite; }
+
+      @keyframes drift { to { transform: translateY(-2000px); } }
+      @keyframes twinkle { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+      /* ===== Full-screen globe ===== */
+      #globe {
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+      }
+
+      /* ===== Floating header ===== */
+      .topbar {
+        position: fixed;
+        top: 22px;
+        left: 24px;
+        right: 24px;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        pointer-events: none;
+      }
+      .topbar > * { pointer-events: auto; }
+
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .brand-logo {
+        width: 42px; height: 42px; border-radius: 13px;
+        display: flex; align-items: center; justify-content: center;
+        background: #1e1b4b; color: #c7d2fe;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      }
+      .brand-name { font: 700 21px Sora, system-ui, sans-serif; letter-spacing: -0.02em; }
+      .brand-sub { font-size: 12.5px; color: var(--muted); }
+
+      .pill {
+        display: flex; align-items: center; gap: 8px;
+        height: 42px; padding: 0 16px;
+        border: 1px solid var(--line); border-radius: 999px;
+        background: var(--surface); backdrop-filter: blur(10px);
+        font-size: 14px; font-weight: 500;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+      }
+      .clock { text-align: right; font-variant-numeric: tabular-nums; }
+      .clock b { font: 600 18px Sora, system-ui, sans-serif; display: block; }
+      .clock span { font-size: 12.5px; color: var(--muted); }
+
+      .ic { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+      /* ===== Caption ===== */
+      .caption {
+        position: fixed;
+        left: 24px; bottom: 26px;
+        z-index: 5;
+        font-size: 13px; color: #c3d2ee;
+        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.8);
+        pointer-events: none;
+      }
+      .caption b { font: 700 15px Sora, system-ui, sans-serif; color: #fff; }
+
+      /* ===== Globe pins ===== */
+      .pin { position: relative; width: 38px; height: 38px; cursor: pointer; }
+      .pin-face {
+        width: 38px; height: 38px; border-radius: 50%; background: #fff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.65), 0 0 18px rgba(75, 139, 255, 0.5);
+        transition: transform 0.15s var(--bounce);
+      }
+      .pin:hover .pin-face { transform: scale(1.18); }
+      .thought-bubble {
+        position: absolute; left: 50%; bottom: calc(100% + 10px);
+        width: max-content; max-width: 230px;
+        transform: translateX(-50%) translateY(6px);
+        padding: 11px 13px; border-radius: 13px;
+        background: #0c1424; border: 1px solid var(--line);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6);
+        opacity: 0; visibility: hidden;
+        transition: opacity 0.16s ease, transform 0.16s ease; z-index: 5;
+      }
+      .thought-bubble::after {
+        content: ''; position: absolute; top: 100%; left: 50%;
+        transform: translateX(-50%); border: 7px solid transparent; border-top-color: #0c1424;
+      }
+      .pin:hover .thought-bubble { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+      .thought-text { margin: 0; font-size: 14px; line-height: 1.45; }
+      .thought-where { display: block; margin-top: 6px; font-size: 12px; color: #86a0c8; }
+
+      /* ===== Floating "share" button ===== */
+      .fab {
+        position: fixed; right: 26px; bottom: 26px; z-index: 8;
+        height: 62px; width: 62px; border: 0; border-radius: 50%;
+        background: var(--sky); color: #fff; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 14px 34px rgba(37, 99, 235, 0.5);
+        transition: transform 0.2s var(--bounce), background 0.2s;
+      }
+      .fab:hover { transform: translateY(-3px) scale(1.04); background: var(--sky-dark); }
+      .fab::before {
+        content: ''; position: absolute; inset: 0; border-radius: 50%;
+        animation: pulse 2.6s ease-out infinite;
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(75, 139, 255, 0.55); }
+        70% { box-shadow: 0 0 0 18px rgba(75, 139, 255, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(75, 139, 255, 0); }
+      }
+      .fab-label {
+        position: fixed; right: 100px; bottom: 42px; z-index: 8;
+        padding: 7px 13px; border-radius: 999px;
+        background: var(--surface); border: 1px solid var(--line); backdrop-filter: blur(8px);
+        font-size: 13px; font-weight: 500; white-space: nowrap;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        opacity: 0; transform: translateX(8px); transition: opacity 0.2s, transform 0.2s; pointer-events: none;
+      }
+      .fab:hover + .fab-label { opacity: 1; transform: translateX(0); }
+
+      /* ===== Share popup ===== */
+      .backdrop {
+        position: fixed; inset: 0; z-index: 20;
+        background: rgba(4, 7, 16, 0.6); backdrop-filter: blur(6px);
+        display: flex; align-items: flex-end; justify-content: flex-end;
+        padding: 26px;
+        opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0.25s;
+      }
+      .backdrop.open { opacity: 1; visibility: visible; }
+
+      .sheet {
+        width: min(420px, 100%);
+        background: var(--surface-solid);
+        border: 1px solid var(--line); border-radius: 22px;
+        padding: 24px; display: flex; flex-direction: column; gap: 20px;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+        transform: translateY(16px) scale(0.98); opacity: 0;
+        transition: transform 0.28s var(--bounce), opacity 0.2s;
+      }
+      .backdrop.open .sheet { transform: none; opacity: 1; }
+
+      .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .sheet h2 { margin: 0; font: 600 20px Sora, system-ui, sans-serif; }
+      .sheet p { margin: 5px 0 0; font-size: 13px; color: var(--muted); }
+      .close {
+        width: 38px; height: 38px; border: 0; border-radius: 11px; flex: none;
+        background: #18263d; color: var(--muted); cursor: pointer;
+        display: flex; align-items: center; justify-content: center; transition: background 0.2s, color 0.2s;
+      }
+      .close:hover { background: #22344f; color: var(--ink); }
+
+      .moods { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; }
+      .mood {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        padding: 11px 4px; min-height: 80px;
+        border: 1.5px solid var(--line); border-radius: 15px;
+        background: #0e1828; color: var(--muted);
+        font: 500 11.5px Inter, system-ui, sans-serif; cursor: pointer;
+        transition: transform 0.18s var(--bounce), border-color 0.2s, background 0.2s, color 0.2s;
+      }
+      .mood:hover { transform: translateY(-2px); color: var(--ink); border-color: #3a4e72; }
+      .mood.on { border-color: var(--sky); background: var(--sky-soft); color: #bcd3ff; transform: scale(1.04); }
+      .mood svg { width: 32px; height: 32px; }
+
+      .label { display: block; font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 8px; }
+      textarea {
+        width: 100%; min-height: 96px; resize: vertical;
+        padding: 13px 15px; border: 1.5px solid var(--line); border-radius: 13px;
+        background: #0b1322; color: var(--ink);
+        font: 400 15px/1.5 Inter, system-ui, sans-serif;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      textarea:focus { outline: none; border-color: var(--sky); box-shadow: 0 0 0 4px rgba(75, 139, 255, 0.18); }
+
+      .btn {
+        height: 52px; border: 0; border-radius: 14px;
+        background: var(--sky); color: #fff; font: 600 16px Inter, system-ui, sans-serif;
+        cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+        transition: background 0.2s, transform 0.15s;
+      }
+      .btn:hover { background: var(--sky-dark); }
+      .btn:active { transform: scale(0.98); }
+      .btn:disabled { background: #2a3b57; color: #6a7c99; cursor: not-allowed; }
+
+      .toast {
+        position: fixed; top: 24px; left: 50%; transform: translateX(-50%) translateY(-14px);
+        z-index: 40; padding: 12px 18px; border-radius: 12px;
+        background: #0f1829; border: 1px solid var(--line); color: var(--ink);
+        font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 10px;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6);
+        opacity: 0; visibility: hidden; transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
+      }
+      .toast.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+      .toast svg { color: #4ade80; }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+      @media (max-width: 560px) {
+        .brand-sub { display: none; }
+        .pill { display: none; }
+        .backdrop { padding: 0; align-items: stretch; }
+        .sheet { width: 100%; border-radius: 22px 22px 0 0; align-self: flex-end; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="space"></div>
+    <div class="layer a" id="starA"></div>
+    <div class="layer b" id="starB"></div>
+    <div class="layer c" id="starC"></div>
+
+    <div id="globe"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg class="ic" width="22" height="22" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></svg>
+        </div>
+        <div>
+          <div class="brand-name">Skylight</div>
+          <div class="brand-sub">Thoughts from around the world</div>
+        </div>
+      </div>
+      <div class="pill">
+        <svg class="ic" width="17" height="17" viewBox="0 0 24 24" style="color:var(--sky)"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
+        <span>Antananarivo</span>
+      </div>
+      <div class="clock">
+        <b id="clockTime">—</b>
+        <span id="clockDate">—</span>
+      </div>
+    </header>
+
+    <div class="caption"><b id="count">0</b> thoughts around the world · hover a face to read it</div>
+
+    <button class="fab" id="fab" aria-label="Share a thought">
+      <svg class="ic" width="26" height="26" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+    </button>
+    <div class="fab-label">Share a thought</div>
+
+    <!-- Share popup -->
+    <div class="backdrop" id="backdrop">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Share a thought">
+        <div class="sheet-head">
+          <div>
+            <h2>Share a thought</h2>
+            <p>It appears on the globe, pinned to where you are now.</p>
+          </div>
+          <button class="close" id="close" aria-label="Close">
+            <svg class="ic" width="20" height="20" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        <div class="moods" id="moods" role="group" aria-label="Mood"></div>
+        <label>
+          <span class="label">Your thought</span>
+          <textarea id="note" placeholder="What's on your mind right now?"></textarea>
+        </label>
+        <button class="btn" id="broadcast" disabled>
+          <svg class="ic" width="20" height="20" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          Pick a mood to broadcast
+        </button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">
+      <svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+      Your thought is on the globe
+    </div>
+
+    <script>
+      // ----- Moods (same faces as the app) -----
+      // Each mood is a little character: its own colour + gradient, eyes, mouth and glow.
+      const EYES = {
+        sleepy: 'M8 10.4c.6.6 1.5.7 2.1.2 M13.9 10.4c.6.6 1.5.7 2.1.2',
+        flat:   'M8.3 10.5h1.7 M14 10.5h1.7',
+        dot:    'M9.2 10.1v.6 M14.8 10.1v.6',
+        happy:  'M8 10.9c.6-.9 1.6-.9 2.2 0 M13.8 10.9c.6-.9 1.6-.9 2.2 0',
+      };
+      const MOODS = [
+        { label: 'Sluggish', c1: '#CBD5E1', c2: '#94A3B8', eyes: EYES.sleepy, mouth: 'M8.9 16.9c1-1.4 2.1-2 3.1-2s2.1.6 3.1 2', cheeks: false },
+        { label: 'Low',      c1: '#C7D2FE', c2: '#818CF8', eyes: EYES.flat,   mouth: 'M9 16.2c.9-.8 1.9-1.1 3-1.1s2.1.3 3 1.1',   cheeks: false },
+        { label: 'Okay',     c1: '#BFDBFE', c2: '#60A5FA', eyes: EYES.dot,    mouth: 'M9 15.4h6',                                   cheeks: false },
+        { label: 'Good',     c1: '#A7F3D0', c2: '#34D399', eyes: EYES.happy,  mouth: 'M8.7 14.5c1 1.2 2.2 1.7 3.3 1.7s2.3-.5 3.3-1.7', cheeks: true },
+        { label: 'Great',    c1: '#FDE68A', c2: '#FBBF24', eyes: EYES.happy,  mouth: 'M8 14c1.2 2 2.5 2.9 4 2.9s2.8-.9 4-2.9',      cheeks: true },
+      ];
+
+      let _gid = 0;
+      function faceSvg(mood) {
+        const m = MOODS[mood - 1] || MOODS[2];
+        const id = 'mg' + _gid++;
+        const cheeks = m.cheeks
+          ? '<circle cx="7.3" cy="14" r="1.5" fill="rgba(244,114,182,.45)"/><circle cx="16.7" cy="14" r="1.5" fill="rgba(244,114,182,.45)"/>'
+          : '';
+        return `<svg viewBox="0 0 24 24" width="100%" height="100%">
+          <defs>
+            <radialGradient id="${id}" cx="35%" cy="28%" r="85%">
+              <stop offset="0%" stop-color="${m.c1}"/>
+              <stop offset="100%" stop-color="${m.c2}"/>
+            </radialGradient>
+          </defs>
+          <circle cx="12" cy="12" r="10.5" fill="url(#${id})" stroke="rgba(10,15,30,.18)" stroke-width="0.7"/>
+          <ellipse cx="8.6" cy="7.6" rx="3.1" ry="1.9" fill="rgba(255,255,255,.4)"/>
+          ${cheeks}
+          <g fill="none" stroke="#2b2742" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="${m.eyes}"/>
+            <path d="${m.mouth}"/>
+          </g>
+        </svg>`;
+      }
+
+      // ----- Sample thoughts -----
+      const thoughts = [
+        { lat: -18.9, lng: 47.5, mood: 3, note: 'Feeling a bit sleepy this morning already', where: 'Antananarivo' },
+        { lat: 48.85, lng: 2.35, mood: 4, note: 'Bonjour from a little cafe', where: 'Paris' },
+        { lat: 35.68, lng: 139.69, mood: 5, note: 'Late-night neon walk, feeling alive', where: 'Tokyo' },
+        { lat: 40.71, lng: -74.0, mood: 2, note: 'Long day, but the skyline helps', where: 'New York' },
+        { lat: -23.55, lng: -46.63, mood: 4, note: 'Coffee and good music today', where: 'São Paulo' },
+        { lat: -33.87, lng: 151.2, mood: 5, note: 'Beach morning, nothing beats it', where: 'Sydney' },
+        { lat: 55.75, lng: 37.62, mood: 3, note: 'Cold but cozy inside', where: 'Moscow' },
+        { lat: 19.43, lng: -99.13, mood: 4, note: 'Tacos fixed everything', where: 'Mexico City' },
+      ];
+
+      function makePin(d) {
+        const pin = document.createElement('div');
+        pin.className = 'pin';
+        pin.style.pointerEvents = 'auto';
+        const face = document.createElement('div');
+        face.className = 'pin-face';
+        face.innerHTML = faceSvg(d.mood);
+        const glow = (MOODS[d.mood - 1] || MOODS[2]).c2;
+        face.style.boxShadow = `0 2px 8px rgba(0,0,0,.5), 0 0 0 2px rgba(255,255,255,.65), 0 0 18px ${glow}aa`;
+        const bubble = document.createElement('div');
+        bubble.className = 'thought-bubble';
+        const text = document.createElement('p');
+        text.className = 'thought-text';
+        text.textContent = d.note;
+        const where = document.createElement('span');
+        where.className = 'thought-where';
+        where.textContent = d.where;
+        bubble.appendChild(text); bubble.appendChild(where);
+        pin.appendChild(face); pin.appendChild(bubble);
+        return pin;
+      }
+
+      // ----- Globe -----
+      // Crisp 2K daytime Earth (three.js planet texture) + terrain bump for relief.
+      const DAY = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg';
+      const BUMP = 'https://unpkg.com/three-globe@2.45.6/example/img/earth-topology.png';
+      const world = new Globe(document.getElementById('globe'))
+        .backgroundColor('rgba(0,0,0,0)')
+        .globeImageUrl(DAY)
+        .bumpImageUrl(BUMP)
+        .showAtmosphere(true)
+        .atmosphereColor('#8fc0ff')
+        .atmosphereAltitude(0.27)
+        .htmlLat((d) => d.lat)
+        .htmlLng((d) => d.lng)
+        .htmlElement((d) => makePin(d))
+        .htmlElementsData(thoughts);
+
+      // Render at the screen's real pixel density so it isn't soft/blurry.
+      world.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      // A little more mountain/ocean relief.
+      const globeMat = world.globeMaterial();
+      globeMat.bumpScale = 10;
+
+      world.controls().autoRotate = true;
+      world.controls().autoRotateSpeed = 0.4;
+      world.controls().enablePan = false;
+      world.pointOfView({ lat: 12, lng: 30, altitude: 2.4 });
+
+      function size() { world.width(window.innerWidth).height(window.innerHeight); }
+      size();
+      window.addEventListener('resize', size);
+
+      document.getElementById('count').textContent = thoughts.length;
+
+      // ----- Starfield -----
+      function starfield(el, n, maxSize) {
+        const shadows = [];
+        for (let i = 0; i < n; i++) {
+          const x = Math.floor(Math.random() * window.innerWidth);
+          const y = Math.floor(Math.random() * 2000);
+          shadows.push(`${x}px ${y}px 0 ${(Math.random() * maxSize).toFixed(1)}px rgba(255,255,255,${(0.4 + Math.random() * 0.6).toFixed(2)})`);
+        }
+        el.style.boxShadow = shadows.join(',');
+      }
+      starfield(document.getElementById('starA'), 140, 0.8);
+      starfield(document.getElementById('starB'), 90, 1.3);
+      starfield(document.getElementById('starC'), 60, 1.0);
+
+      // ----- Clock -----
+      function tick() {
+        const now = new Date();
+        const tz = 'Indian/Antananarivo';
+        document.getElementById('clockTime').textContent = now.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+        document.getElementById('clockDate').textContent = now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' });
+      }
+      tick(); setInterval(tick, 1000);
+
+      // ----- Share popup -----
+      const backdrop = document.getElementById('backdrop');
+      const moodsEl = document.getElementById('moods');
+      const noteEl = document.getElementById('note');
+      const broadcast = document.getElementById('broadcast');
+      const toast = document.getElementById('toast');
+      let chosen = 0;
+
+      MOODS.forEach((m, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'mood';
+        b.innerHTML = faceSvg(i + 1) + `<span>${m.label}</span>`;
+        b.onclick = () => {
+          chosen = i + 1;
+          [...moodsEl.children].forEach((c, j) => c.classList.toggle('on', j === i));
+          refresh();
+        };
+        moodsEl.appendChild(b);
+      });
+
+      function refresh() {
+        const ready = chosen > 0 && noteEl.value.trim() !== '';
+        broadcast.disabled = !ready;
+        broadcast.lastChild.textContent = chosen === 0 ? ' Pick a mood to broadcast' : ' Broadcast thought';
+      }
+      noteEl.addEventListener('input', refresh);
+
+      function open() { backdrop.classList.add('open'); setTimeout(() => noteEl.focus(), 60); }
+      function close() { backdrop.classList.remove('open'); }
+      document.getElementById('fab').onclick = open;
+      document.getElementById('close').onclick = close;
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+      broadcast.onclick = () => {
+        // Demo: drop a pin near the sample location and show the toast
+        thoughts.push({ lat: -18.9, lng: 47.5, mood: chosen, note: noteEl.value.trim(), where: 'Antananarivo (you)' });
+        world.htmlElementsData(thoughts);
+        document.getElementById('count').textContent = thoughts.length;
+        close();
+        chosen = 0; noteEl.value = '';
+        [...moodsEl.children].forEach((c) => c.classList.remove('on'));
+        refresh();
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2600);
+      };
+    </script>
+  </body>
+</html>
